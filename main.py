@@ -11,7 +11,8 @@ class VideoURL(BaseModel):
 async def list_formats(data: VideoURL):
     url = data.url
     ydl_opts = {
-        'cookiesfrombrowser': 'chrome',  # Dynamically fetch cookies from the user's Chrome browser
+        'cookiesfrombrowser': ('chrome', 'default'),  # Use Chrome browser with the default profile
+        'verbose': True,                              # Enable detailed logging for debugging
     }
     formats = []
 
@@ -30,7 +31,9 @@ async def list_formats(data: VideoURL):
                             "fps": f.get('fps', '')
                         })
     except yt_dlp.utils.DownloadError as e:
-        return {"error": str(e)}
+        return {"error": f"Download error: {str(e)}"}
+    except Exception as e:
+        return {"error": f"An unexpected error occurred: {str(e)}"}
 
     return formats
 
@@ -43,17 +46,19 @@ async def download_video(data: dict):
         'format': format_id,
         'outtmpl': '%(title)s.%(ext)s',
         'merge_output_format': 'mp4',
-        'cookiesfrombrowser': 'chrome',  # Dynamically fetch cookies from the user's Chrome browser
-        'quiet': True,
+        'cookiesfrombrowser': ('chrome', 'default'),  # Use Chrome browser with the default profile
+        'quiet': True,                                # Suppress non-critical output
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
     except yt_dlp.utils.DownloadError as e:
-        return {"error": str(e)}
+        return {"error": f"Download error: {str(e)}"}
+    except Exception as e:
+        return {"error": f"An unexpected error occurred: {str(e)}"}
 
-    return {"status": "Downloaded on server (no client download link available)."}
+    return {"status": "Downloaded successfully."}
 
 @app.get("/")
 def home():
