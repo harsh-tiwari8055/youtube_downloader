@@ -1,22 +1,24 @@
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from yt_dlp import YoutubeDL
 import os
 
 app = FastAPI()
 
-# Define path to your cookies file
+# Path to your cookies file
 COOKIES_FILE = os.path.join(os.getcwd(), "youtube_cookies.txt")
 
 @app.get("/")
 def read_root():
     return {"status": "YouTube Downloader API is running."}
 
+
 @app.post("/list_formats")
 async def list_formats(request: Request):
     data = await request.json()
     url = data.get("url")
-    
+
     ydl_opts = {
         "cookiefile": COOKIES_FILE,
         "quiet": True,
@@ -40,16 +42,48 @@ async def list_formats(request: Request):
                 if f.get("vcodec") != "none" and f.get("acodec") != "none"
             ]
         return JSONResponse(content={"title": info.get("title"), "formats": formats})
-    
+
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+class StreamRequest(BaseModel):
+    url: str
+    format_id: str
+
+@app.post("/get_stream_url")
+async def get_stream_url(data: StreamRequest):
+    ydl_opts = {
+        "cookiefile": COOKIES_FILE,
+        "quiet": True,
+        "skip_download": True,
+        "format": data.format_id
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(data.url, download=False)
+            formats = info.get("formats", [])
+            selected_format = next((f for f in formats if f["format_id"] == data.format_id), None)
+
+            if not selected_format:
+                return JSONResponse(content={"error": "Format not found"}, status_code=404)
+
+            return {
+                "stream_url": selected_format["url"],
+                "title": info.get("title", "video")
+            }
+
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
 
 @app.post("/download")
 async def download_video(url: str = Form(...), format_id: str = Form(...)):
     output_file = "%(title)s.%(ext)s"
-    
+
     ydl_opts = {
-        "cookies": COOKIES_FILE,
+        "cookiefile": COOKIES_FILE,
         "format": format_id,
         "outtmpl": output_file
     }
@@ -58,6 +92,6 @@ async def download_video(url: str = Form(...), format_id: str = Form(...)):
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         return {"status": "Download successful!"}
-    
+
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
