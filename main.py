@@ -1,65 +1,63 @@
-from fastapi import FastAPI, Request
-from pydantic import BaseModel
-import yt_dlp
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import JSONResponse
+from yt_dlp import YoutubeDL
+import os
 
 app = FastAPI()
 
-class VideoURL(BaseModel):
-    url: str
-
-@app.post("/list_formats")
-async def list_formats(data: VideoURL):
-    url = data.url
-    ydl_opts = {
-        'cookiesfrombrowser': ('chrome', 'default'),  # Use Chrome browser with the default profile
-        'verbose': True,                              # Enable detailed logging for debugging
-    }
-    formats = []
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            for f in info['formats']:
-                if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') != 'none':
-                    resolution = f.get('format_note') or f.get('height', 'unknown')
-                    if str(resolution) in ['360p', '480p', '720p', '1080p']:
-                        formats.append({
-                            "title": info['title'],
-                            "resolution": resolution,
-                            "format_id": f['format_id'],
-                            "ext": f['ext'],
-                            "fps": f.get('fps', '')
-                        })
-    except yt_dlp.utils.DownloadError as e:
-        return {"error": f"Download error: {str(e)}"}
-    except Exception as e:
-        return {"error": f"An unexpected error occurred: {str(e)}"}
-
-    return formats
-
-@app.post("/download_video")
-async def download_video(data: dict):
-    url = data["url"]
-    format_id = data["format_id"]
-
-    ydl_opts = {
-        'format': format_id,
-        'outtmpl': '%(title)s.%(ext)s',
-        'merge_output_format': 'mp4',
-        'cookiesfrombrowser': ('chrome', 'default'),  # Use Chrome browser with the default profile
-        'quiet': True,                                # Suppress non-critical output
-    }
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-    except yt_dlp.utils.DownloadError as e:
-        return {"error": f"Download error: {str(e)}"}
-    except Exception as e:
-        return {"error": f"An unexpected error occurred: {str(e)}"}
-
-    return {"status": "Downloaded successfully."}
+# Define path to your cookies file
+COOKIES_FILE = os.path.join(os.getcwd(), "youtube_cookies.txt")
 
 @app.get("/")
-def home():
-    return {"message": "yt-dlp API is running"}
+def read_root():
+    return {"status": "YouTube Downloader API is running."}
+
+@app.post("/list_formats")
+async def list_formats(request: Request):
+    data = await request.json()
+    url = data.get("url")
+    
+    ydl_opts = {
+        "cookies": COOKIES_FILE,
+        "quiet": True,
+        "skip_download": True,
+        "forcejson": True,
+        "extract_flat": False
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            formats = [
+                {
+                    "format_id": f["format_id"],
+                    "ext": f["ext"],
+                    "resolution": f.get("resolution") or f"{f.get('height', '?')}p",
+                    "filesize": f.get("filesize"),
+                    "format_note": f.get("format_note")
+                }
+                for f in info.get("formats", [])
+                if f.get("vcodec") != "none" and f.get("acodec") != "none"
+            ]
+        return JSONResponse(content={"title": info.get("title"), "formats": formats})
+    
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/download")
+async def download_video(url: str = Form(...), format_id: str = Form(...)):
+    output_file = "%(title)s.%(ext)s"
+    
+    ydl_opts = {
+        "cookies": COOKIES_FILE,
+        "format": format_id,
+        "outtmpl": output_file
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        return {"status": "Download successful!"}
+    
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
