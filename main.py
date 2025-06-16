@@ -18,7 +18,7 @@ async def list_formats(request: Request):
     url = data.get("url")
     
     ydl_opts = {
-        "cookies": COOKIES_FILE,
+        "cookiefile": COOKIES_FILE,
         "quiet": True,
         "skip_download": True,
         "forcejson": True,
