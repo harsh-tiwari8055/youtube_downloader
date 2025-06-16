@@ -36,6 +36,22 @@ async def list_formats(data: VideoURL):
                     })
     return formats
 
+@app.post("/download")
+async def download_video(req: VideoRequest, format_id: str):
+    ydl_opts = {
+        'cookiefile': 'cookies.txt',
+        'format': format_id,
+        'outtmpl': 'downloads/%(title)s.%(ext)s'
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.download([req.url])
+            return {"message": "Download started."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/get_stream_url")
 async def get_stream_url(data: FormatRequest):
     url = data.url
