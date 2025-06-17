@@ -9,9 +9,11 @@ app = FastAPI()
 # Path to your cookies file
 COOKIES_FILE = os.path.join(os.getcwd(), "youtube_cookies.txt")
 
+
 @app.get("/")
 def read_root():
     return {"status": "YouTube Downloader API is running."}
+
 
 @app.post("/list_formats")
 async def list_formats(request: Request):
@@ -23,7 +25,7 @@ async def list_formats(request: Request):
         "quiet": True,
         "skip_download": True,
         "forcejson": True,
-        "extract_flat": False
+        "extract_flat": False,
     }
 
     try:
@@ -34,7 +36,7 @@ async def list_formats(request: Request):
 
             for f in info.get("formats", []):
                 filesize = f.get("filesize")  # File size in bytes
-                if not filesize and video_duration and f.get("tbr"):  # Estimate size if not provided
+                if not filesize and video_duration and f.get("tbr"):  # Estimate size
                     filesize = (f["tbr"] * 1000 / 8) * video_duration
 
                 formats.append({
@@ -44,7 +46,7 @@ async def list_formats(request: Request):
                     "filesize": f"{filesize / (1024 * 1024):.2f} MB" if filesize else "Unknown",
                     "format_note": f.get("format_note"),
                     "vcodec": f.get("vcodec"),
-                    "acodec": f.get("acodec")
+                    "acodec": f.get("acodec"),
                 })
 
             return JSONResponse(content={"title": info.get("title"), "formats": formats})
@@ -57,13 +59,14 @@ class StreamRequest(BaseModel):
     url: str
     format_id: str
 
+
 @app.post("/get_stream_url")
 async def get_stream_url(data: StreamRequest):
     ydl_opts = {
         "cookiefile": COOKIES_FILE,
         "quiet": True,
         "skip_download": True,
-        "format": data.format_id
+        "format": data.format_id,
     }
 
     try:
@@ -77,7 +80,7 @@ async def get_stream_url(data: StreamRequest):
 
             return {
                 "stream_url": selected_format["url"],
-                "title": info.get("title", "video")
+                "title": info.get("title", "video"),
             }
 
     except Exception as e:
@@ -91,7 +94,7 @@ async def download_video(url: str = Form(...), format_id: str = Form(...)):
     ydl_opts = {
         "cookiefile": COOKIES_FILE,
         "format": format_id,
-        "outtmpl": output_file
+        "outtmpl": output_file,
     }
 
     try:
