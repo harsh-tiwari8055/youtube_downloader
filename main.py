@@ -13,7 +13,6 @@ COOKIES_FILE = os.path.join(os.getcwd(), "youtube_cookies.txt")
 def read_root():
     return {"status": "YouTube Downloader API is running."}
 
-
 @app.post("/list_formats")
 async def list_formats(request: Request):
     data = await request.json()
@@ -30,18 +29,25 @@ async def list_formats(request: Request):
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            formats = [
-                {
+            video_duration = info.get("duration", 0)  # Duration in seconds
+            formats = []
+
+            for f in info.get("formats", []):
+                filesize = f.get("filesize")  # File size in bytes
+                if not filesize and video_duration and f.get("tbr"):  # Estimate size if not provided
+                    filesize = (f["tbr"] * 1000 / 8) * video_duration
+
+                formats.append({
                     "format_id": f["format_id"],
                     "ext": f["ext"],
                     "resolution": f.get("resolution") or f"{f.get('height', '?')}p",
-                    "filesize": f.get("filesize"),
-                    "format_note": f.get("format_note")
-                }
-                for f in info.get("formats", [])
-                if f.get("vcodec") != "none" and f.get("acodec") != "none"
-            ]
-        return JSONResponse(content={"title": info.get("title"), "formats": formats})
+                    "filesize": f"{filesize / (1024 * 1024):.2f} MB" if filesize else "Unknown",
+                    "format_note": f.get("format_note"),
+                    "vcodec": f.get("vcodec"),
+                    "acodec": f.get("acodec")
+                })
+
+            return JSONResponse(content={"title": info.get("title"), "formats": formats})
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
