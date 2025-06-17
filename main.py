@@ -1,14 +1,12 @@
-from fastapi import FastAPI, Request, Form
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
 import os
 
 app = FastAPI()
 
-# Path to your cookies file
 COOKIES_FILE = os.path.join(os.getcwd(), "youtube_cookies.txt")
-
 
 @app.get("/")
 def read_root():
@@ -31,7 +29,7 @@ async def list_formats(request: Request):
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            video_duration = info.get("duration", 0)  # Duration in seconds
+            video_duration = info.get("duration", 0)
             formats = []
 
             for f in info.get("formats", []):
@@ -82,34 +80,8 @@ async def get_stream_url(data: StreamRequest):
             return {
                 "stream_url": selected_format.get("url"),
                 "title": info.get("title", "video"),
+                "ext": selected_format.get("ext", "mp4")
             }
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
-
-@app.post("/download")
-async def download_video(url: str = Form(...), format_id: str = Form(...)):
-    output_template = "%(title)s.%(ext)s"
-
-    ydl_opts = {
-        "cookiefile": COOKIES_FILE,
-        "format": format_id,
-        "outtmpl": output_template,
-        "quiet": True
-    }
-
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filepath = ydl.prepare_filename(info)
-
-        return FileResponse(
-            path=filepath,
-            filename=os.path.basename(filepath),
-            media_type="application/octet-stream"
-        )
-
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
