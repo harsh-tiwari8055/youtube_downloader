@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
 import os
@@ -35,8 +35,8 @@ async def list_formats(request: Request):
             formats = []
 
             for f in info.get("formats", []):
-                filesize = f.get("filesize")  # File size in bytes
-                if not filesize and video_duration and f.get("tbr"):  # Estimate size
+                filesize = f.get("filesize")
+                if not filesize and video_duration and f.get("tbr"):
                     filesize = (f["tbr"] * 1000 / 8) * video_duration
 
                 formats.append({
@@ -72,14 +72,15 @@ async def get_stream_url(data: StreamRequest):
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(data.url, download=False)
-            formats = info.get("formats", [])
-            selected_format = next((f for f in formats if f["format_id"] == data.format_id), None)
+            selected_format = next(
+                (f for f in info.get("formats", []) if str(f.get("format_id")) == str(data.format_id)), None
+            )
 
             if not selected_format:
                 return JSONResponse(content={"error": "Format not found"}, status_code=404)
 
             return {
-                "stream_url": selected_format["url"],
+                "stream_url": selected_format.get("url"),
                 "title": info.get("title", "video"),
             }
 
@@ -89,18 +90,25 @@ async def get_stream_url(data: StreamRequest):
 
 @app.post("/download")
 async def download_video(url: str = Form(...), format_id: str = Form(...)):
-    output_file = "%(title)s.%(ext)s"
+    output_template = "%(title)s.%(ext)s"
 
     ydl_opts = {
         "cookiefile": COOKIES_FILE,
         "format": format_id,
-        "outtmpl": output_file,
+        "outtmpl": output_template,
+        "quiet": True
     }
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        return {"status": "Download successful!"}
+            info = ydl.extract_info(url, download=True)
+            filepath = ydl.prepare_filename(info)
+
+        return FileResponse(
+            path=filepath,
+            filename=os.path.basename(filepath),
+            media_type="application/octet-stream"
+        )
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
