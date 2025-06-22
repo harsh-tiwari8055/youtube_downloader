@@ -45,6 +45,11 @@ def get_total_bytes(url, format_id):
         print("Metadata extraction error:", e)
     return 0
 
+@app.get("/")
+def root():
+    return {"message": "YouTube Downloader API is live 🎉"}
+
+
 
 @app.post("/start_download")
 def start_download(data: DownloadRequest):
